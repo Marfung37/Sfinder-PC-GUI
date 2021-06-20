@@ -1,5 +1,5 @@
 # Sfinder-PC-GUI
-A gui for pc-based research based on the sfinder program made by knewjade
+A gui for pc-based research based on the sfinder program made by knewjade  
 Some libraries to download if you want full functionality
 * For finding true minimal [sfinder-strict-minimal](https://github.com/eight04/sfinder-strict-minimal)
 * For handling fumen scripts [fumen api](https://github.com/knewjade/tetris-fumen)
