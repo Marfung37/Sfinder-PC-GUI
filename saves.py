@@ -1,4 +1,5 @@
 from utilities import Utility
+import os
 import re
 
 class Saves(Utility):
@@ -6,17 +7,29 @@ class Saves(Utility):
     PIECES = ["T", "I", "L", "J", "S", "Z", "O"]
 
     logFile = "resources/output/savesLastOutput.txt"
+
+    fumenLabels = "fumenScripts/fumenLabels.js"
+    scripts = "fumenScripts/scriptsOutput.txt"
     
-    def runSaves(self, wantedSaves, writeFails=True):
+    def runSaves(self, wantedSaves, writeFails=True, overPC=False):
+        if not self.checkFileExist(self.logFile):
+            self.takeError("FileError", "The log file for saves doesn't exist. May be due to sfinder error when running path prior.")
+            return
+
         # store the chance and the total cases of the setup
         chanceData = self.getFromLastOutput("  -> success = (\d+.\d{2}% \(\d+\/\d+\))", self.logFile)[0]
-        totalCases = int(re.findall("/(\d+)[)]", chanceData)[0])
+        if overPC:
+            totalCases = int(re.findall("\((\d+)/", chanceData)[0])
+        else:
+            totalCases = int(re.findall("/(\d+)[)]", chanceData)[0])
 
         # empty savePieceOutput
         infile = open(self.savePieceOutput, "w")
         field = self.getFromLastOutput("[_X]+", self.logFile, re.MULTILINE)
         infile.write("\n".join(field) + "\n")
-        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)
+        if pieces:
+            pieces = pieces[0]
         infile.write(pieces + "\n")
         infile.write(chanceData + "\n")
 
@@ -64,6 +77,9 @@ class Saves(Utility):
                 if '' in savePieces:
                     savePieces = set()
                 
+                isSolveable = line[1] != "0"
+                if not isSolveable:
+                    continue
                 allSaves = self.__createAllSavesQ(savePieces, bagSavePieces)
                 if allSaves:
                     if allBool:
@@ -77,6 +93,7 @@ class Saves(Utility):
                         if(self.parseStack(allSaves, stack)):
                             countWanted[wantedSave] += 1
                         else:
+                            print(allSaves)
                             if writeFails:
                                 if wantedSave not in wantedSavesFails:
                                     wantedSavesFails[wantedSave] = [line[0]]
@@ -87,22 +104,21 @@ class Saves(Utility):
                 for key, value in countWanted.items():
                     if totalCases:
                         percent = value / totalCases * 100
-                        writeFile.write(f'{wantedSave}: {percent:.2f}% ({value}/{totalCases})\n')
+                        writeFile.write(f'{key}: {percent:.2f}% ({value}/{totalCases})\n')
                     else:
-                        writeFile.write(f'{key}: {value} \n')
+                        writeFile.write(f'{key}: {value}\n')
                     if writeFails and wantedSave in wantedSavesFails:
                         writeFile.write("Fail Queues:\n")
                         writeFile.write(",".join(wantedSavesFails[wantedSave]))
                     writeFile.write("\n")
                 if allBool:
-                    writeFile.write("All Saves:\n")
                     for key, value in countAll.items():
                         if totalCases:
                             percent = value / totalCases * 100
                             writeFile.write(f'{key}: {percent:.2f}% ({value}/{totalCases})\n')
                         else:
-                            writeFile.write(key + ": " + str(value) + "\n")
-        
+                            writeFile.write(f'{key}: {value}\n')
+
         if allBool:
             if countWanted:
                 return countWanted, countAll
@@ -114,15 +130,13 @@ class Saves(Utility):
     def __findLastBag(self, pieces):
         if not re.match("[!1-7*]", pieces[-1]):
             self.takeError("Pieces SyntaxError", "The pieces inputted doesn't end with a bag")
-            raise SyntaxError("The pieces inputted doesn't end with a bag")
         try:
-                # what kind of bag is the last part
-                lastPartPieces = re.findall("\[?([\^tiljszoTILJSZO*]+)\]?p?[1-7!]?", pieces)[-1]
-                # number of pieces used in the next bag
-                newBagNumUsed = pieces[-1]
+            # what kind of bag is the last part
+            lastPartPieces = re.findall("\[?([\^tiljszoTILJSZO*]+)\]?p?[1-7!]?", pieces)[-1]
+            # number of pieces used in the next bag
+            newBagNumUsed = pieces[-1]
         except:
-                self.takeError("Pieces SyntaxError", "The pieces inputted doesn't end with a bag")
-                raise SyntaxError("The pieces inputted doesn't end with a bag")
+            self.takeError("Pieces SyntaxError", "The pieces inputted doesn't end with a bag")
 
         # turn the piece input into data for determining saves
         if lastPartPieces[0] == "*":
@@ -148,8 +162,12 @@ class Saves(Utility):
         return set(lastBag), newBagNumUsed
     
     # finds all the saves and adds them to a list
-    def __createAllSavesQ(self, savePieces, bagSavePieces):
+    def __createAllSavesQ(self, savePieces, bagSavePieces, solveable=True):
         allSaves = []
+        if solveable and not savePieces:
+            lstSaves = list(bagSavePieces)
+            saves = [self.tetrisSort("".join(lstSaves))]
+            return saves
         for p in savePieces:
             lstSaves = list(bagSavePieces)
             lstSaves.append(p)
@@ -177,7 +195,6 @@ class Saves(Utility):
                     queue = re.findall("(/.*?/)", wantedPieces[index:])[0]
                 except:
                     self.takeError("WantedSave SyntaxError", "missing ending '/' in regex queue")
-                    raise SyntaxError("missing ending '/' in regex queue")
                 stack.append(queue)
                 index += len(queue) - 1
                 queue = ""
@@ -200,7 +217,6 @@ class Saves(Utility):
                     operatorHold = ""
                 elif len(operatorHold) == 1:
                     self.takeError("WantedSave SyntaxError", "Operator inputted incorrectly should be && or ||")
-                    raise SyntaxError("Operator inputted incorrectly should be && or ||")
                 else:
                     operatorHold += char
                 
@@ -214,11 +230,9 @@ class Saves(Utility):
                     return stack, index
                 else:
                     self.takeError("WantedSave SyntaxError", "missing opening parentheses")
-                    raise SyntaxError("missing opening parentheses")
             # error
             else:
                 self.takeError("WantedSave SyntaxError", f"wanted pieces input has unknown character '{char}'")
-                raise SyntaxError(f"wanted pieces input has unknown character '{char}'")
             index += 1
         
         if queue:
@@ -230,18 +244,17 @@ class Saves(Utility):
             return stack
         else:
             self.takeError("WantedSave SyntaxError", "missing closing parentheses")
-            raise SyntaxError("missing closing parentheses")
     
     def __compareQueues(self, allSaves, queue, diff=False):
         # check regex queue
         if re.match("/.*/", queue):
             if not diff:
                 for save in allSaves:
-                    if re.match(queue[1:-1], save):
+                    if re.search(queue[1:-1], save):
                         return True
             else:
                 for save in allSaves:
-                    if not re.match(queue[1:-1], save):
+                    if not re.search(queue[1:-1], save):
                         return True
         
         # normal queue
@@ -259,8 +272,7 @@ class Saves(Utility):
                 elif index == len(queue):
                         return True
         
-        return False
-                        
+        return False                
 
     # returns a list parallel to allSaves with boolen if fits that queue
     def listCompareQueues(self, allSaves, queue):
@@ -301,16 +313,57 @@ class Saves(Utility):
                         else:
                             currBool = currBool or saveable
                     else:
-                        self.takeError("WantedParse RuntimeError", "Operator variable got a non-operator")
-                        raise RuntimeError("Operator variable got a non-operator")
+                        self.takeError("WantedParse RuntimeError", "Operator variable got a non-operator (please contact dev)")
                 else:
                     currBool = saveable
 
             else:
-                self.takeError("WantedParse RuntimeError", "stack includes string that's not a queue nor operator")
-                raise RuntimeError("stack includes string that's not a queue nor operator")
+                self.takeError("WantedParse RuntimeError", "stack includes string that's not a queue nor operator (please contact dev)")
         return currBool
 
+    # filter the path fumen's for the particular save
+    def filterPath(self, wantedSaves):
+        headerLine = ""
+        pathFileLines = []
+        fumenSet = set()
+        with open(self.pathFile, "r") as outfile:
+            headerLine = outfile.readline()
+            for line in outfile:
+                line = line.rstrip().split(",")
+                pathFileLines.append(line)
+                fumens = line[4].split(";")
+                fumenSet = fumenSet | set(fumens)
+        
+        fumenSet = list(fumenSet)
+        os.system(f'node {self.fumenLabels} ' + " ".join(fumenSet))
+        
+        fumenAndQueue = {}
+        with open(self.scripts, "r") as outfile:
+            for line, fumen in zip(outfile, fumenSet):
+                fumenAndQueue[fumen] = line.rstrip()
+        
+        os.remove(self.scripts)
+        
+        # main section
+        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        lastBag, newBagNumUsed = self.__findLastBag(pieces)
+        stack = self.__makeStack(wantedSaves)
+        for line in pathFileLines:
+            queue = line[0]
+            fumens = line[4].split(";")
+            for i in range(len(fumens) - 1, 0, -1):
+                savePiece = set(queue) - set(fumenAndQueue[fumens[i]])
+                bagSavePieces = lastBag - set(line[0][-newBagNumUsed:])
+                allSave = [self.tetrisSort("".join(savePiece) + "".join(bagSavePieces))]
+                if not self.parseStack(allSave, stack):
+                    fumens.pop(i)
+            line[4] = ";".join(fumens)
+            line[1] = str(len(fumens))
+
+        with open(self.pathFile, "w") as infile:
+            for line in pathFileLines:
+                infile.write(",".join(line) + "\n")
+    
     # sorts the pieces inputted
     def tetrisSort(self, queue):
         # order of the pieces TILJSZO
@@ -345,4 +398,8 @@ class Saves(Utility):
         return re.match("[TILJSZO]+", str(queue))
     
     def runSfinderPathForSaves(self, pieces, options=""):
-        self.runSfinder("path", pieces, logFile=self.logFile, options=f"-k pattern -f csv -o {self.pathFile} {options}")
+        if self.runSfinder("path", pieces, logFile=self.logFile, options=f"-k pattern -f csv -o {self.pathFile} {options}"):
+            self.removeLog(self.logFile)
+
+if __name__ == "__main__":
+    a = Saves()

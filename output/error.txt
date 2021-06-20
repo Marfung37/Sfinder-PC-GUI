@@ -1,1 +1,2 @@
-Regex Error: Issue while regex might be issue with expression while looking at lastoutput
+Error #: 0
+Sfinder Error: Should specify equal to or more than 8 pieces: CurrentPieces=7

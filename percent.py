@@ -4,7 +4,8 @@ class Percent(Utility):
     logFile = "resources/output/percentLastOutput.txt"
 
     def runPercent(self, pieces):
-        self.runSfinderPercent(pieces)
+        if self.runSfinderPercent(pieces):
+            return
 
         with open(self.percentOutput, "w") as infile:
             chance = self.getFromLastOutput("success = (.*)", self.logFile)[0]
@@ -20,4 +21,7 @@ class Percent(Utility):
             infile.write(noSolveQueues + "\n")
 
     def runSfinderPercent(self, pieces, options=""):
-        self.runSfinder("percent", pieces, logFile=self.logFile, options=f'-fc -1 {options}')
+        if self.runSfinder("percent", pieces, logFile=self.logFile, options=f'-fc -1 {options}'):
+            self.removeLog(self.logFile)
+            return True
+        return False
