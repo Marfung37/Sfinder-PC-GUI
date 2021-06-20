@@ -255,7 +255,6 @@ class GUI(tk.Tk):
         with open(self.__solves.solvesOutput, "r") as outfile:
             self.__output.insert(tk.INSERT, outfile.read())
 
-
     def __givePercent(self):
         self.__putBoardDataIntoInput()
         self.__output.delete('1.0', tk.END)

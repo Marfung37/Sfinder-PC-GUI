@@ -1,5 +1,5 @@
 4
-XX____XXXX
-XXX___XXXX
-XXXX__XXXX
-XXX___XXXX
+XXX______X
+XX_______X
+XXXX_____X
+XXX______X

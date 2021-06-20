@@ -93,7 +93,6 @@ class Saves(Utility):
                         if(self.parseStack(allSaves, stack)):
                             countWanted[wantedSave] += 1
                         else:
-                            print(allSaves)
                             if writeFails:
                                 if wantedSave not in wantedSavesFails:
                                     wantedSavesFails[wantedSave] = [line[0]]
@@ -342,25 +341,32 @@ class Saves(Utility):
             for line, fumen in zip(outfile, fumenSet):
                 fumenAndQueue[fumen] = line.rstrip()
         
-        os.remove(self.scripts)
-        
         # main section
         pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
         lastBag, newBagNumUsed = self.__findLastBag(pieces)
         stack = self.__makeStack(wantedSaves)
         for line in pathFileLines:
-            queue = line[0]
+            queue = self.tetrisSort(line[0])
             fumens = line[4].split(";")
-            for i in range(len(fumens) - 1, 0, -1):
-                savePiece = set(queue) - set(fumenAndQueue[fumens[i]])
+            index = len(fumens) - 1
+            while index >= 0:
+                # X at the end to make sure same length and that last piece must be the difference
+                label = self.tetrisSort(fumenAndQueue[fumens[index]]) + "X"
+                for pieceL, pieceQ in zip(label, queue):
+                    if pieceL != pieceQ:
+                        savePiece = pieceQ
+                        break
+                
                 bagSavePieces = lastBag - set(line[0][-newBagNumUsed:])
                 allSave = [self.tetrisSort("".join(savePiece) + "".join(bagSavePieces))]
                 if not self.parseStack(allSave, stack):
-                    fumens.pop(i)
+                    fumens.pop(index)
+                index -= 1
             line[4] = ";".join(fumens)
             line[1] = str(len(fumens))
 
         with open(self.pathFile, "w") as infile:
+            infile.write(headerLine)
             for line in pathFileLines:
                 infile.write(",".join(line) + "\n")
     
@@ -400,6 +406,3 @@ class Saves(Utility):
     def runSfinderPathForSaves(self, pieces, options=""):
         if self.runSfinder("path", pieces, logFile=self.logFile, options=f"-k pattern -f csv -o {self.pathFile} {options}"):
             self.removeLog(self.logFile)
-
-if __name__ == "__main__":
-    a = Saves()
