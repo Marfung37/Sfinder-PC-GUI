@@ -330,7 +330,10 @@ class Saves(Utility):
             for line in outfile:
                 line = line.rstrip().split(",")
                 pathFileLines.append(line)
-                fumens = line[4].split(";")
+                if line[4]:
+                    fumens = line[4].split(";")
+                else:
+                    continue
                 fumenSet = fumenSet | set(fumens)
         
         fumenSet = list(fumenSet)
@@ -347,7 +350,10 @@ class Saves(Utility):
         stack = self.__makeStack(wantedSaves)
         for line in pathFileLines:
             queue = self.tetrisSort(line[0])
-            fumens = line[4].split(";")
+            if line[4]:
+                fumens = line[4].split(";")
+            else:
+                continue
             index = len(fumens) - 1
             while index >= 0:
                 # X at the end to make sure same length and that last piece must be the difference
