@@ -10,8 +10,9 @@ class Saves(Utility):
 
     fumenLabels = "fumenScripts/fumenLabels.js"
     scripts = "fumenScripts/scriptsOutput.txt"
+    bestSave = "resources/bestSaves/"
     
-    def runSaves(self, wantedSaves, writeFails=True, overPC=False):
+    def runSaves(self, wantedSaves, writeFails=False, basicSaves=True, overPC=False):
         if not self.checkFileExist(self.logFile):
             self.takeError("FileError", "The log file for saves doesn't exist. May be due to sfinder error when running path prior.")
             return
@@ -33,24 +34,48 @@ class Saves(Utility):
         infile.write(pieces + "\n")
         infile.write(chanceData + "\n")
 
-        infile.write("\nBasic Saves:\n")
-        basicStats = self.numberOfWantedSaves("T,TT,I,II,L,LL,J,JJ,S,SS,Z,ZZ,O,OO")
-        for p in self.PIECES:
-            count1 = basicStats[p]
-            percent1 = count1 / totalCases * 100
-            count2 = basicStats[p*2]
-            percent2 = count2 / totalCases * 100
-            infile.write(f'{p}: {percent1:.2f}% ({count1}/{totalCases}) ')
-            infile.write(f'{p*2}: {percent2:.2f}% ({count2}/{totalCases})\n')
+        if basicSaves:
+            infile.write("\nBasic Saves:\n")
+            basicStats = self.numberOfWantedSaves("T,TT,I,II,L,LL,J,JJ,S,SS,Z,ZZ,O,OO")
+            for p in self.PIECES:
+                count1 = basicStats[p]
+                percent1 = count1 / totalCases * 100
+                count2 = basicStats[p*2]
+                percent2 = count2 / totalCases * 100
+                infile.write(f'{p}: {percent1:.2f}% ({count1}/{totalCases}) ')
+                infile.write(f'{p*2}: {percent2:.2f}% ({count2}/{totalCases})\n')
 
         infile.write("\nWanted Saves:\n")
 
         wantedOutput = self.numberOfWantedSaves(wantedSaves, writeFile=infile, writeFails=writeFails, totalCases=totalCases)
         
         infile.close()
+    
+    def runBestSaves(self, pcNum, overPC=False):
+        if not self.checkFileExist(self.logFile):
+            self.takeError("FileError", "The log file for saves doesn't exist. May be due to sfinder error when running path prior.")
+            return
+        
+        # store the chance and the total cases of the setup
+        chanceData = self.getFromLastOutput("  -> success = (\d+.\d{2}% \(\d+\/\d+\))", self.logFile)[0]
+        if overPC:
+            totalCases = int(re.findall("\((\d+)/", chanceData)[0])
+        else:
+            totalCases = int(re.findall("/(\d+)[)]", chanceData)[0])
+
+        data = self.calculateBestSavesList()
+        if not data:
+            return
+        infile = open(self.savePieceOutput, "w")
+        infile.write("Best Saves:\n")
+        for save, count in data.items():
+            percent = count / totalCases * 100
+            infile.write(f'{save}: {percent:.2f} {count}/{totalCases}\n')
+
+        infile.close()
 
     # return an dictionary including all the wantedSaves over the path file
-    def numberOfWantedSaves(self, wantedSaves, writeFile=None, writeFails=True, totalCases=0):
+    def numberOfWantedSaves(self, wantedSaves, writeFile=None, writeFails=False, totalCases=0):
         countWanted = {}
         wantedSavesFails = {}
         wantedStacks = []
@@ -72,14 +97,15 @@ class Saves(Utility):
             outfile.readline()
             for line in outfile:
                 line = line.split(",")
+                if line[1] == "0":
+                    continue
+
                 bagSavePieces = lastBag - set(line[0][-newBagNumUsed:])
                 savePieces = set(line[3].strip().split(";"))
                 if '' in savePieces:
                     savePieces = set()
                 
-                isSolveable = line[1] != "0"
-                if not isSolveable:
-                    continue
+                
                 allSaves = self.__createAllSavesQ(savePieces, bagSavePieces)
                 if allSaves:
                     if allBool:
@@ -106,10 +132,9 @@ class Saves(Utility):
                         writeFile.write(f'{key}: {percent:.2f}% ({value}/{totalCases})\n')
                     else:
                         writeFile.write(f'{key}: {value}\n')
-                    if writeFails and wantedSave in wantedSavesFails:
+                    if writeFails and key in wantedSavesFails:
                         writeFile.write("Fail Queues:\n")
-                        writeFile.write(",".join(wantedSavesFails[wantedSave]))
-                    writeFile.write("\n")
+                        writeFile.write(",".join(wantedSavesFails[key]) + "\n")
                 if allBool:
                     for key, value in countAll.items():
                         if totalCases:
@@ -124,6 +149,45 @@ class Saves(Utility):
             else:
                 return countAll
         return countWanted
+    
+    def calculateBestSavesList(self, pcNum=2):
+        # defaults to 2nd pc as it's the most common pc to use this for
+
+        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        # from pieces get the pieces given for the possible pieces in the last bag of the pc and it's length
+        lastBag, newBagNumUsed = self.__findLastBag(pieces)
+
+        path = f'{self.bestSave}PC-{pcNum}.txt'
+        if not self.checkFileExist(path):
+            self.takeError("FileError", f"The best saves for {pcNum} have not been found yet. However, you can create your own if you create the file {path}.")
+            return
+
+        with open(path, "r") as outfile:
+            bestSaves = {line.rstrip(): 0 for line in outfile}
+
+        with open(self.pathFile, "r") as outfile:
+            outfile.readline()
+            for line in outfile:
+                line = line.split(",")
+                if line[1] == "0":
+                    continue
+
+                bagSavePieces = lastBag - set(line[0][-newBagNumUsed:])
+                savePieces = set(line[3].strip().split(";"))
+                if '' in savePieces:
+                    savePieces = set()
+                
+                allSaves = self.__createAllSavesQ(savePieces, bagSavePieces)
+
+                for save in bestSaves:
+                    currBool = False
+                    for s in save.split("/"):
+                        currBool = currBool or self.__compareQueues(allSaves, s)
+                    if currBool:
+                        bestSaves[save] += 1
+                        break
+            
+        return bestSaves
 
     # determine the length of the last bag based on queue
     def __findLastBag(self, pieces):

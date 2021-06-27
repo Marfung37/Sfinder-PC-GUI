@@ -16,9 +16,12 @@ class GUI(tk.Tk):
     # error file
     error = "output/error.txt"
 
+    config = "config.txt"
+
     def __init__(self):
         super().__init__()
         self.title("Sfinder PC GUI")
+        self.geometry("600x600")
         self.style = ttk.Style(self)
 
         self.__saves = Saves()
@@ -36,7 +39,7 @@ class GUI(tk.Tk):
         universalFrame.grid(column=1, row=4, columnspan=6)
 
         # the tab controler and the different tabs
-        tabControl = ttk.Notebook(self, width=300, height=160)
+        tabControl = ttk.Notebook(self, height=160)
         boardTab = ttk.Frame(tabControl)
         saveTab = ttk.Frame(tabControl)
         solveTab = ttk.Frame(tabControl)
@@ -102,16 +105,25 @@ class GUI(tk.Tk):
         moveBoardFrame.grid(column=0, row=1, columnspan=3, rowspan=3, sticky=tk.W) 
 
     def __setupSaveTab(self, saveTab):
+        self.__overrideVar = tk.BooleanVar()
+
         self.__wantedPiecesEntry = ttk.Entry(saveTab, width=18)
+        self.__pcNumEntry = ttk.Entry(saveTab, width=2)
+        overrideDifferentBoard = tk.Checkbutton(saveTab, text="Override", variable=self.__overrideVar)
         runSavePieces = ttk.Button(saveTab, text="Count Wanted", command=self.__savePieces)
         runSfinderSaves = ttk.Button(saveTab, text="Make Path", command=self.__savePath)
         runFilterPath = ttk.Button(saveTab, text="Filter Path", command=self.__filterPath)
+        runBestSaves = ttk.Button(saveTab, text="Best Saves", command=self.__getBestSaves)
 
-        ttk.Label(saveTab, text="Wanted Saves").grid(column=0, row=0)
-        self.__wantedPiecesEntry.grid(column=1, row=0, columnspan=4)
-        runSavePieces.grid(column=0, row=1)
+        ttk.Label(saveTab, text="Wanted Saves").grid(column=0, row=0, sticky="e")
+        ttk.Label(saveTab, text="PC Num").grid(column=0, row=1, sticky="e")
+        self.__wantedPiecesEntry.grid(column=1, row=0, columnspan=4, sticky="w")
+        self.__pcNumEntry.grid(column=1, row=1, sticky="w")
+        overrideDifferentBoard.grid(column=2, row=1)
+        runSavePieces.grid(column=0, row=2)
+        runBestSaves.grid(column=1, row=2)
+        runFilterPath.grid(column=2, row=2)
         runSfinderSaves.grid(column=1,row=4)
-        runFilterPath.grid(column=1, row=1)
     
     def __setupSolveTab(self, solveTab):
         self.__solveKey = tk.StringVar()
@@ -202,7 +214,17 @@ class GUI(tk.Tk):
             self.__output.insert(tk.INSERT, "Finished Making Path")
 
     def __savePieces(self):
-        self.__saves.runSaves(self.__wantedPiecesEntry.get(), overPC=True)
+        if not self.__pathRan():
+            return
+
+        with open(self.config, "r") as outfile:
+            for line in outfile:
+                if re.match("General Saves = ", line):
+                    basicSaves = line.split()[-1] == "True"
+                elif re.match("Over PC cases = ", line):
+                    overPC = line.split()[-1] == "True"
+
+        self.__saves.runSaves(self.__wantedPiecesEntry.get(), basicSaves=basicSaves, overPC=overPC)
 
         if not self.__errorCheck():
             # output the data on the gui
@@ -225,11 +247,52 @@ class GUI(tk.Tk):
                     self.__output.insert(tk.INSERT, line)
     
     def __filterPath(self):
+        if not self.__pathRan():
+            return
+
         self.__saves.filterPath(self.__wantedPiecesEntry.get())
 
         if not self.__errorCheck():
             self.__output.delete('1.0', tk.END)
             self.__output.insert(tk.INSERT, "Finished filter")
+
+    def __getBestSaves(self):
+        if not self.__pathRan():
+            return
+
+        self.__saves.runBestSaves(self.__pcNumEntry.get())
+
+        if not self.__errorCheck():
+            self.__output.delete("1.0", tk.END)
+            with open(self.__saves.savePieceOutput, "r") as outfile:
+                for line in outfile:
+                    self.__output.insert(tk.INSERT, line)
+    
+    def __pathRan(self):
+        # a fail safe in case the user accidently try to run wanted pieces without making a path file for the board
+        if not self.__overrideVar.get():
+            pathBoard = []
+            with open(self.__saves.logFile, "r") as outfile:
+                outfile.readline()
+                for line in outfile:
+                    if re.match("[_X]", line):
+                        pathBoard.append(line)
+                    else:
+                        break
+            self.__putBoardDataIntoInput()
+            with open(self.setupFile, "r") as outfile:
+                indexPath = 0
+                for line in outfile:
+                    if re.match("[_X]", line):
+                        if line.rstrip() != pathBoard[indexPath].rstrip():
+                            # board doesn't match the board that made the path file
+                            self.__output.delete('1.0', tk.END)
+                            self.__output.insert(tk.INSERT, "The board doesn't match the board that made the path file. If you want to override this, please check the override checkbox.")
+                            return False
+                        indexPath += 1
+                        if indexPath == len(pathBoard):
+                            break
+        return True
 
     def __giveSolves(self):
         self.__putBoardDataIntoInput()
@@ -271,6 +334,9 @@ class GUI(tk.Tk):
         if not self.__errorCheck():
             with open(self.__percent.percentOutput, "r") as outfile:
                 self.__output.insert(tk.INSERT, outfile.readline())
+
+    def __getFromConfig(self, key):
+        pass
 
 if __name__ == "__main__":
     GUI()

@@ -1,2 +1,2 @@
-Error #: 3
-Sfinder Error: Should specify equal to or more than 7 pieces: CurrentPieces=2
+Error #: 13
+Sfinder Error: Should specify equal to or more than 7 pieces: CurrentPieces=6

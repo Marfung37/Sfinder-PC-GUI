@@ -1,7 +1,12 @@
 Board
 
 Saves
+# gives the general saves of each piece and duplicates
+General Saves = False
+# gives the percents of saves over the total cases which are solveable over default of over total permutations of pieces
 Over PC cases = False
+# puts the fails queues for the saves in the saveOutput file
+Write Fails = False
 
 Solves
 
