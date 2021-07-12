@@ -12,14 +12,22 @@ class Saves(Utility):
     scripts = "fumenScripts/scriptsOutput.txt"
     bestSave = "resources/bestSaves/"
     
-    def runSaves(self, wantedSaves, writeFails=False, basicSaves=True, overPC=False):
+    def runSaves(self, wantedSaves, configs=None):
+        if configs is None:
+            configs = {
+            "General Saves": True,
+            "Over PC Cases": False,
+            "Save Fraction": True,
+            "Write Fails": False
+            }
+        
         if not self.checkFileExist(self.logFile):
             self.takeError("FileError", "The log file for saves doesn't exist. May be due to sfinder error when running path prior.")
             return
 
         # store the chance and the total cases of the setup
         chanceData = self.getFromLastOutput("  -> success = (\d+.\d{2}% \(\d+\/\d+\))", self.logFile)[0]
-        if overPC:
+        if configs["Over PC Cases"]:
             totalCases = int(re.findall("\((\d+)/", chanceData)[0])
         else:
             totalCases = int(re.findall("/(\d+)[)]", chanceData)[0])
@@ -28,13 +36,13 @@ class Saves(Utility):
         infile = open(self.savePieceOutput, "w")
         field = self.getFromLastOutput("[_X]+", self.logFile, re.MULTILINE)
         infile.write("\n".join(field) + "\n")
-        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)
+        pieces = self.getFromLastOutput("  ([TILJSZOP1-7!,\[\]^*]+)", self.logFile)
         if pieces:
             pieces = pieces[0]
         infile.write(pieces + "\n")
         infile.write(chanceData + "\n")
 
-        if basicSaves:
+        if configs["General Saves"]:
             infile.write("\nBasic Saves:\n")
             basicStats = self.numberOfWantedSaves("T,TT,I,II,L,LL,J,JJ,S,SS,Z,ZZ,O,OO")
             for p in self.PIECES:
@@ -42,23 +50,30 @@ class Saves(Utility):
                 percent1 = count1 / totalCases * 100
                 count2 = basicStats[p*2]
                 percent2 = count2 / totalCases * 100
-                infile.write(f'{p}: {percent1:.2f}% ({count1}/{totalCases}) ')
-                infile.write(f'{p*2}: {percent2:.2f}% ({count2}/{totalCases})\n')
+                percentStr = f'{p}: {percent1:.2f}% '
+
+                if configs["Save Fraction"]:
+                    percentStr += f'({count1}/{totalCases}) '
+                percentStr = f'{p*2}: {percent2:.2f}% '
+                if configs["Save Fraction"]:
+                    percentStr += f'({count1}/{totalCases})'
+                
+                infile.write(percentStr + "\n")
 
         infile.write("\nWanted Saves:\n")
 
-        wantedOutput = self.numberOfWantedSaves(wantedSaves, writeFile=infile, writeFails=writeFails, totalCases=totalCases)
+        wantedOutput = self.numberOfWantedSaves(wantedSaves, writeFile=infile, writeFails=configs["Write Fails"], totalCases=totalCases, saveFraction=configs["Save Fraction"])
         
         infile.close()
     
-    def runBestSaves(self, pcNum, overPC=False):
+    def runBestSaves(self, pcNum, configs):
         if not self.checkFileExist(self.logFile):
             self.takeError("FileError", "The log file for saves doesn't exist. May be due to sfinder error when running path prior.")
             return
         
         # store the chance and the total cases of the setup
         chanceData = self.getFromLastOutput("  -> success = (\d+.\d{2}% \(\d+\/\d+\))", self.logFile)[0]
-        if overPC:
+        if configs["Over PC Cases"]:
             totalCases = int(re.findall("\((\d+)/", chanceData)[0])
         else:
             totalCases = int(re.findall("/(\d+)[)]", chanceData)[0])
@@ -70,12 +85,12 @@ class Saves(Utility):
         infile.write("Best Saves:\n")
         for save, count in data.items():
             percent = count / totalCases * 100
-            infile.write(f'{save}: {percent:.2f} {count}/{totalCases}\n')
+            infile.write(f'{save}: {percent:.2f} ({count}/{totalCases})\n')
 
         infile.close()
 
     # return an dictionary including all the wantedSaves over the path file
-    def numberOfWantedSaves(self, wantedSaves, writeFile=None, writeFails=False, totalCases=0):
+    def numberOfWantedSaves(self, wantedSaves, writeFile=None, writeFails=False, totalCases=0, saveFraction=True):
         countWanted = {}
         wantedSavesFails = {}
         wantedStacks = []
@@ -89,7 +104,7 @@ class Saves(Utility):
             countWanted[wantedSave] = 0
             wantedStacks.append(self.__makeStack(wantedSave))
 
-        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        pieces = self.getFromLastOutput("  ([TILJSZOP1-7!,\[\]^*]+)", self.logFile)[0]
         # from pieces get the pieces given for the possible pieces in the last bag of the pc and it's length
         lastBag, newBagNumUsed = self.__findLastBag(pieces)
 
@@ -129,19 +144,26 @@ class Saves(Utility):
                 for key, value in countWanted.items():
                     if totalCases:
                         percent = value / totalCases * 100
-                        writeFile.write(f'{key}: {percent:.2f}% ({value}/{totalCases})\n')
+                        percentStr = f'{key}: {percent:.2f}%'
+                        if saveFraction:
+                            percentStr += f' ({value}/{totalCases})'
                     else:
-                        writeFile.write(f'{key}: {value}\n')
+                        percentStr = f'{key}: {value}'
+                    percentStr += "\n"
                     if writeFails and key in wantedSavesFails:
-                        writeFile.write("Fail Queues:\n")
-                        writeFile.write(",".join(wantedSavesFails[key]) + "\n")
+                        percentStr += "Fail Queues:\n"
+                        percentStr += ",".join(wantedSavesFails[key]) + "\n"
+                    writeFile.write(percentStr)
                 if allBool:
                     for key, value in countAll.items():
                         if totalCases:
                             percent = value / totalCases * 100
-                            writeFile.write(f'{key}: {percent:.2f}% ({value}/{totalCases})\n')
+                            percentStr = f'{key}: {percent:.2f}%'
+                            if saveFraction:
+                                percentStr += f'({value}/{totalCases})'
                         else:
-                            writeFile.write(f'{key}: {value}\n')
+                            percentStr = f'{key}: {value}'
+                        writeFile.write(percentStr + "\n")
 
         if allBool:
             if countWanted:
@@ -153,7 +175,7 @@ class Saves(Utility):
     def calculateBestSavesList(self, pcNum=2):
         # defaults to 2nd pc as it's the most common pc to use this for
 
-        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        pieces = self.getFromLastOutput("  ([TILJSZOP1-7!,\[\]^*]+)", self.logFile)[0]
         # from pieces get the pieces given for the possible pieces in the last bag of the pc and it's length
         lastBag, newBagNumUsed = self.__findLastBag(pieces)
 
@@ -195,7 +217,7 @@ class Saves(Utility):
             self.takeError("Pieces SyntaxError", "The pieces inputted doesn't end with a bag")
         try:
             # what kind of bag is the last part
-            lastPartPieces = re.findall("\[?([\^tiljszoTILJSZO*]+)\]?p?[1-7!]?", pieces)[-1]
+            lastPartPieces = re.findall("\[?([\^tiljszoTILJSZO*]+)\]?P?[1-7!]?", pieces)[-1]
             # number of pieces used in the next bag
             newBagNumUsed = pieces[-1]
         except:
@@ -358,10 +380,10 @@ class Saves(Utility):
             elif self.isQueue(ele) or type(ele) == type([]):
                 if self.isQueue(ele):
                     saveable = self.__compareQueues(allSaves, ele, diff=avoid)
+                    if negate:
+                        saveable = not saveable
                 else:
                     saveable = self.parseStack(allSaves, ele, negate, avoid)
-                if negate:
-                    saveable = not saveable
                 negate = distributeNOT
                 avoid = distributeAvoid
                 if operator:
@@ -409,9 +431,9 @@ class Saves(Utility):
                 fumenAndQueue[fumen] = line.rstrip()
         
         # main section
-        pieces = self.getFromLastOutput("  ([TILJSZOp1-7!,\[\]^*]+)", self.logFile)[0]
+        pieces = self.getFromLastOutput("  ([TILJSZOP1-7!,\[\]^*]+)", self.logFile)[0]
         lastBag, newBagNumUsed = self.__findLastBag(pieces)
-        stack = self.__makeStack(wantedSaves)
+        stack = self.__makeStack(wantedSaves.split(",")[0])
         for line in pathFileLines:
             queue = self.tetrisSort(line[0])
             if line[4]:

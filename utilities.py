@@ -22,7 +22,7 @@ class Utility():
         if logFile is None:
             logFile = self.lastOutput
     
-        commandStr = f'java -jar {self.sfinder} {cmd} -p {pieces} -fp {self.field} -lp {logFile} {options}'
+        commandStr = f'java -jar {self.sfinder} {cmd} -p {pieces.upper()} -fp {self.field} -lp {logFile} {options}'
         os.system(commandStr)
         return self.__handleSfinderError(errorNum)
 

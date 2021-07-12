@@ -1,2 +1,2 @@
-Error #: 13
-Sfinder Error: Should specify equal to or more than 7 pieces: CurrentPieces=6
+Error #: 1
+Sfinder Error: Empty block in field should be multiples of 4: EmptyCount=26

@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import tkinter as tk
 from tkinter import ttk
 from board import Board
@@ -9,6 +10,9 @@ from percent import Percent
 
 class GUI(tk.Tk):
     setupFile = "resources/input/field.txt"
+    imagePath = "resources/output/fig.gif"
+
+    fumenGetPages = "fumenScripts/fumenCountPages.js"
     
     # tool outputs
     saveToolOutput = "output/saveToolOutput.txt"
@@ -17,6 +21,11 @@ class GUI(tk.Tk):
     error = "output/error.txt"
 
     config = "config.txt"
+
+    # queuing files
+    fieldsQueue = "resources/queue/fieldsInQueue.txt"
+
+    wantedPiecesMap = "resources/wantedPiecesMap.json"
 
     def __init__(self):
         super().__init__()
@@ -44,11 +53,13 @@ class GUI(tk.Tk):
         saveTab = ttk.Frame(tabControl)
         solveTab = ttk.Frame(tabControl)
         percentTab = ttk.Frame(tabControl)
+        #queueTab = ttk.Frame(tabControl)
 
         tabControl.add(boardTab, text="Board")
         tabControl.add(saveTab, text="Save")
         tabControl.add(solveTab, text="Solve")
         tabControl.add(percentTab, text="Percent")
+        #tabControl.add(queueTab, text="Queue")
 
         tabControl.grid(column=1, row=0, columnspan=6,rowspan=4)
 
@@ -57,6 +68,7 @@ class GUI(tk.Tk):
         self.__setupSaveTab(saveTab)
         self.__setupSolveTab(solveTab)
         self.__setupPercentTab(percentTab)
+        #self.__setupQueueTab(queueTab)
 
         self.__setStyling()
 
@@ -102,7 +114,7 @@ class GUI(tk.Tk):
         clearButton.grid(column=5, row=0, padx=(120,0))
         mirrorButton.grid(column=5, row=1, padx=(120,0))
         convertButton.grid(column=5, row=2, padx=(120,0))
-        moveBoardFrame.grid(column=0, row=1, columnspan=3, rowspan=3, sticky=tk.W) 
+        moveBoardFrame.grid(column=0, row=1, columnspan=3, rowspan=3, sticky=tk.W)
 
     def __setupSaveTab(self, saveTab):
         self.__overrideVar = tk.BooleanVar()
@@ -132,16 +144,25 @@ class GUI(tk.Tk):
         minimalRb = ttk.Radiobutton(solveTab, text="Minimal", variable=self.__solveKey, value="minimal")
         uniqueRb = ttk.Radiobutton(solveTab, text="Unique", variable=self.__solveKey, value="unique")
         runSolves = ttk.Button(solveTab, text="Run Solves", command=self.__giveSolves)
+        uniqueSolvesFromPath = ttk.Button(solveTab, text="Solve From Path", command=self.__getPathUnique)
         trueMinimal = ttk.Button(solveTab, text="True Minimal", command=self.__runTrueMinimal)
+        preview = ttk.Button(solveTab, text="Preview Solves", command=self.__createGif)
 
         minimalRb.grid(column=0, row=0)
         uniqueRb.grid(column=1, row=0)
         runSolves.grid(column=2, row=0)
-        trueMinimal.grid(column=0, row=1)
+        uniqueSolvesFromPath.grid(column=0, row=1)
+        trueMinimal.grid(column=1, row=1)
+        preview.grid(column=1, row=2)
 
     def __setupPercentTab(self, percentTab):
         runPercent = ttk.Button(percentTab, text="Percent", command=self.__givePercent)
         runPercent.grid(column=3, row=2)
+    
+    def __setupQueueTab(self, queueTab):
+        queueButton = ttk.Button(queueTab, text="Queue Board and Pieces", command=self.__createQueuedOperations)
+        
+        queueButton.grid(column=0, row=0, columnspan=4)
 
     def __putBoardDataIntoInput(self):
         maxHeight = self.__getHeight.get()
@@ -197,8 +218,41 @@ class GUI(tk.Tk):
             infile.write(self.__output.get("1.0", "end-1c").rstrip() + "\n")
         
         # tell user it has been saved
-        self.__output.insert(tk.INSEART, "Output saved")
+        self.__output.insert(tk.INSERT, "Output saved")
     
+    def __createQueuedOperations(self):
+        self.__output.delete('1.0', tk.END)
+
+        pieces = self.__getPieces.get()
+        # pieces has characters in it
+        if not pieces:
+            self.__output.insert(tk.INSERT, "Pieces is empty") 
+            return
+
+        maxHeight = self.__getHeight.get()
+        if not maxHeight.isnumeric():
+            self.__output.insert(tk.INSERT, "Height should be a number")
+            return
+        maxHeight = int(maxHeight)
+
+        readableBoardData = ""
+        rawBoardData = self.__board.boardData[self.__board.NUMROW - maxHeight:]
+        for row in rawBoardData:
+            readableBoardData += "\n"
+            for col in row:
+                if col:
+                    readableBoardData += "X"
+                else:
+                    readableBoardData += "_"
+
+        all = str(maxHeight) + readableBoardData + "\n" + pieces + "\n"
+
+        with open(self.fieldsQueue, "a") as infile:
+            infile.write(all)
+
+        self.__output.insert(tk.INSERT, "Saved: \n")
+        self.__output.insert(tk.INSERT, all)
+
     # make the path file for saves
     def __savePath(self):
         self.__putBoardDataIntoInput()
@@ -217,14 +271,19 @@ class GUI(tk.Tk):
         if not self.__pathRan():
             return
 
-        with open(self.config, "r") as outfile:
-            for line in outfile:
-                if re.match("General Saves = ", line):
-                    basicSaves = line.split()[-1] == "True"
-                elif re.match("Over PC cases = ", line):
-                    overPC = line.split()[-1] == "True"
+        configs = {
+            "General Saves": False,
+            "Over PC Cases": False,
+            "Save Fraction": False,
+            "Write Fails": False
+        }
+        
+        self.__getFromConfig(configs)
 
-        self.__saves.runSaves(self.__wantedPiecesEntry.get(), basicSaves=basicSaves, overPC=overPC)
+        wantedSaves = self.__handleWantedPieces()
+        if wantedSaves == "Error":
+            return
+        self.__saves.runSaves(wantedSaves, configs)
 
         if not self.__errorCheck():
             # output the data on the gui
@@ -247,20 +306,30 @@ class GUI(tk.Tk):
                     self.__output.insert(tk.INSERT, line)
     
     def __filterPath(self):
+        self.__output.delete('1.0', tk.END)
         if not self.__pathRan():
             return
 
-        self.__saves.filterPath(self.__wantedPiecesEntry.get())
+        wantedSaves = self.__handleWantedPieces()
+        if wantedSaves == "Error":
+            return
+
+        self.__saves.filterPath(wantedSaves)
 
         if not self.__errorCheck():
-            self.__output.delete('1.0', tk.END)
             self.__output.insert(tk.INSERT, "Finished filter")
 
     def __getBestSaves(self):
         if not self.__pathRan():
             return
 
-        self.__saves.runBestSaves(self.__pcNumEntry.get())
+        configs = {
+            "Over PC Cases": False,
+        }
+        
+        self.__getFromConfig(configs)
+
+        self.__saves.runBestSaves(self.__pcNumEntry.get(), configs)
 
         if not self.__errorCheck():
             self.__output.delete("1.0", tk.END)
@@ -294,6 +363,56 @@ class GUI(tk.Tk):
                             break
         return True
 
+    def __handleWantedPieces(self):
+        usrInput = self.__wantedPiecesEntry.get()
+        if not usrInput:
+            self.__output.insert(tk.INSERT, "Wanted Saves is empty") 
+            return "Error"
+        usrInput = usrInput.replace(" ", "")
+
+        kwargs = re.findall("[k]=\[[^\[]*?\]|[k]=[^,]*", usrInput)
+        for kwarg in kwargs:
+            kwIndex = usrInput.find(kwarg[2:])
+            if kwIndex != -1:
+                usrInput = usrInput[:kwIndex] + usrInput[kwIndex + len(kwarg[2:]):]
+        if re.search("[k]=\[", usrInput):
+            # missing closing bracket
+            self.__output.insert(tk.INSERT, "Wanted Saves missing closing bracket in key") 
+            return "Error"
+        if re.search("\],", usrInput):
+            # missing opening bracket
+            self.__output.insert(tk.INSERT, "Wanted Saves missing opening bracket in key") 
+            return "Error"
+
+        usrInput = usrInput.split(",")
+        i = 0
+        j = 0
+        while j < len(kwargs):
+            if usrInput[i] == kwargs[j][:2]:
+                usrInput[i] = kwargs[j]
+                j += 1
+            i += 1
+
+        for i, wantedSave in enumerate(usrInput):
+            wantedSave = wantedSave.split("=")
+        
+            if wantedSave[0] == "k":
+                allKeys = []
+                if wantedSave[1][0] == "[" and wantedSave[1][-1] == "]":
+                    allKeys = wantedSave[1][1:-1].split(",")
+                else:
+                    allKeys.append(wantedSave[1])
+
+                outfile = open(self.wantedPiecesMap)
+                wantedMap = json.load(outfile)
+                usrInput[i] = ",".join([",".join(wantedMap[key]) for key in allKeys])
+
+                outfile.close()
+        
+        wantedSaves = ",".join(usrInput)
+
+        return wantedSaves
+
     def __giveSolves(self):
         self.__putBoardDataIntoInput()
         self.__output.delete('1.0', tk.END)
@@ -311,12 +430,55 @@ class GUI(tk.Tk):
                 for line in outfile:
                     self.__output.insert(tk.INSERT, line)
 
+    def __getPathUnique(self):
+        if not self.__pathRan():
+            return
+        
+        self.__solves.uniqueFromPath()
+
+        self.__output.delete('1.0', tk.END)
+        with open(self.__solves.solvesOutput, "r") as outfile:
+            self.__output.insert(tk.INSERT, outfile.read())
+
     def __runTrueMinimal(self):
+        if not self.__pathRan():
+            return
+
         self.__solves.true_minimal()
 
         self.__output.delete('1.0', tk.END)
         with open(self.__solves.solvesOutput, "r") as outfile:
             self.__output.insert(tk.INSERT, outfile.read())
+
+    def __createGif(self):
+        gifWin = tk.Toplevel()
+        gifWin.title("Preview")
+
+        gifLabel = tk.Label(gifWin)
+
+        with open(self.__solves.solvesOutput, "r") as outfile:
+            fumenCode = outfile.readlines()[2].rstrip()
+        
+        os.system(f'java -jar {self.__solves.sfinder} util fig -t {fumenCode} -c four -f no -o {self.imagePath} -lp resources/output/last_output.txt')
+        
+        os.system(f'node {self.fumenGetPages} {fumenCode}')
+
+        with open(self.__solves.scripts, "r") as outfile:
+            numPages = int(outfile.read().rstrip())
+
+        imageFrames = [tk.PhotoImage(file=self.imagePath, format="gif -index %i"%(i)) for i in range(numPages)]
+        
+        def update(index):
+            frame = imageFrames[index]
+            index += 1
+            if index == numPages:
+                index = 0
+            gifLabel.configure(image=frame)
+            gifWin.after(500, update, index)
+        
+        gifLabel.pack()
+        gifWin.after(0, update, 0)
+        gifWin.mainloop()
 
     def __givePercent(self):
         self.__putBoardDataIntoInput()
@@ -333,10 +495,18 @@ class GUI(tk.Tk):
         # output the data on the gui
         if not self.__errorCheck():
             with open(self.__percent.percentOutput, "r") as outfile:
-                self.__output.insert(tk.INSERT, outfile.readline())
+                for line in outfile:
+                    if re.match("[TILJSZO]+\n", line):
+                        break
+                    self.__output.insert(tk.INSERT, line)
 
-    def __getFromConfig(self, key):
-        pass
+    def __getFromConfig(self, keys):
+        with open(self.config, "r") as outfile:
+            for line in outfile:
+                if line[0] != "#" and line != "\n":
+                    key = re.match("(.+) =", line).groups()[0]
+                    if key in keys:
+                        keys[key] = bool(re.search("= True #", line))
 
 if __name__ == "__main__":
     GUI()
